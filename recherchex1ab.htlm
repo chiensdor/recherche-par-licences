@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <header style="text-align:center; margin-bottom:1em;">
+  <h1 style="color:#007BFF;">🔍 Recherche par Licence - Version 3.2</h1>
+</header>
+
+  <style>
+    body { font-family: sans-serif; background: #f4f7fa; padding: 1em; margin: 0; }
+    h1 { text-align: center; color: #007BFF; margin-bottom: 1em; font-size: 1.5em; }
+    #feedback { text-align: center; font-weight: bold; margin-bottom: 1em; }
+    .controls { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.5em; margin-bottom: 1em; }
+    input, button { padding: 0.5em; border-radius: 4px; border: 1px solid #ccc; }
+    input[type="text"], input[type="file"] { width: 200px; }
+    button { background-color: #007BFF; color: white; border: none; cursor: pointer; }
+    button:hover { background-color: #0056b3; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1em; }
+    th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; font-size: 0.9em; }
+    th { background-color: #007BFF; color: white; }
+    @media screen and (max-width: 600px) {
+      table, thead, tbody, th, td, tr { display: block; }
+      tr { margin-bottom: 1em; background: #fff; border-radius: 4px; }
+      td { padding: 0.5em; border-bottom: 1px solid #ccc; }
+    }
+  </style>
+</head>
+<body>
+
+
+<div class="controls">
+  <input type="file" id="csvFile" accept=".csv">
+  <input type="text" id="licenceInput" placeholder="Licence">
+  <button onclick="search()">Rechercher</button>
+  <button onclick="reset()">🔁 Réinitialiser</button>
+  <button onclick="exportCSV()">📁 Export CSV</button>
+  <button onclick="exportPDF()">🖨️ Export PDF</button>
+</div>
+
+<div id="feedback">📂 Veuillez choisir un fichier CSV pour commencer</div>
+
+<table id="resultsTable">
+  <thead>
+    <tr>
+      <th>Licence</th><th>Nom</th><th>Prénom</th><th>Catégorie</th><th>Nom de la course</th><th>Nom du chien</th><th>Points course</th><th>PUCE OU TATOUAGE</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+let rawCSVLines = [], headers = [], mapKeys = {};
+const separator = ';';
+const alias = {
+  licence: ['licence'],
+  nom: ['nom'],
+  prenom: ['prenom', 'prâ€šnom', 'prénom'],
+  categorie: ['categorie', 'catâ€šgorie', 'catégorie'],
+  'nom de la course': ['nom de la course'],
+  'nom du chien': ['nom du chien', 'chien'],
+  'points course': ['points course'],
+  puce: ['puce', 'puce ou tatouage']
+};
+
+function normalize(str) {
+  return str.toLowerCase()
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/â€š/g, 'é')
+    .replace(/â€/g, 'è')
+    .replace(/ï»¿/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+document.getElementById('csvFile').addEventListener('change', function (e) {
+  const reader = new FileReader();
+  reader.onload = function (event) {
+    const text = event.target.result;
+    const rows = text.split('\n').filter(r => r.trim() !== '');
+    headers = rows[0].split(separator).map(h => h.trim());
+    rawCSVLines = rows.slice(1);
+    headers.forEach(h => {
+      const key = normalize(h);
+      Object.entries(alias).forEach(([stdKey, variants]) => {
+        if (variants.includes(key)) mapKeys[stdKey] = h;
+      });
+    });
+    document.getElementById('feedback').textContent = `✅ Fichier chargé (${rawCSVLines.length} lignes)`;
+  };
+  reader.readAsText(e.target.files[0]);
+});
+
+function search() {
+  const licenceVal = normalize(document.getElementById('licenceInput').value);
+  const results = [];
+
+  rawCSVLines.forEach(line => {
+    const values = line.split(separator).map(v => v.trim());
+    const rowObj = headers.reduce((obj, h, i) => { obj[h] = values[i] || ''; return obj; }, {});
+    const licence = normalize(rowObj[mapKeys['licence']] || '');
+    if (licence.includes(licenceVal)) results.push(rowObj);
+  });
+
+  const tbody = document.querySelector('#resultsTable tbody');
+  tbody.innerHTML = '';
+  if (!results.length) {
+    document.getElementById('feedback').textContent = '❌ Aucun résultat';
+    return;
+  }
+
+  document.getElementById('feedback').textContent = `🔎 ${results.length} résultat(s) trouvé(s)`;
+  results.forEach(obj => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${obj[mapKeys['licence']] || ''}</td>
+      <td>${obj[mapKeys['nom']] || ''}</td>
+      <td>${obj[mapKeys['prenom']] || ''}</td>
+      <td>${obj[mapKeys['categorie']] || ''}</td>
+      <td>${obj[mapKeys['nom de la course']] || ''}</td>
+      <td>${obj[mapKeys['nom du chien']] || ''}</td>
+      <td>${obj[mapKeys['points course']] || ''}</td>
+      <td>${obj[mapKeys['puce']] || ''}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function reset() {
+  document.getElementById('licenceInput').value = '';
+  document.querySelector('#resultsTable tbody').innerHTML = '';
+  document.getElementById('feedback').textContent = '🔁 Recherche réinitialisée';
+}
+function exportPDF() {
+  const rows = document.querySelectorAll('#resultsTable tbody tr');
+  if (!rows.length) return alert('❌ Aucun résultat à exporter');
+
+  const win = window.open('', '', 'width=800,height=600');
+  let html = `
+    <html><head><title>Résultats PDF</title>
+    <style>
+      body { font-family: sans-serif; padding: 1em; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border: 1px solid #ccc; padding: 0.5em; text-align: left; font-size: 0.9em; }
+      th { background-color: #007BFF; color: white; }
+    </style></head><body>
+    <h2>Résultats filtrés</h2>
+    <table><thead><tr>
+      <th>Licence</th><th>Nom</th><th>Prénom</th><th>Catégorie</th><th>Nom de la course</th><th>Nom du chien</th><th>Points course</th><th>PUCE OU TATOUAGE</th>
+    </tr></thead><tbody>
+  `;
+
+  rows.forEach(row => {
+    const cells = Array.from(row.cells).map(c => `<td>${c.textContent}</td>`).join('');
+    html += `<tr>${cells}</tr>`;
+  });
+
+  html += '</tbody></table></body></html>';
+  win.document.write(html);
+  win.document.close();
+  win.print();
+}
+function exportCSV() {
+  const rows = document.querySelectorAll('#resultsTable tbody tr');
+  if (!rows.length) return alert('❌ Aucun résultat à exporter');
+  let csv = 'Licence,Nom,Prénom,Catégorie,Nom de la course,Nom du chien,Points course,PUCE OU TATOUAGE\n';
+  rows.forEach(row => {
+    const cells = Array.from(row.cells).map(c => `"${c.textContent}"`);
+    csv += cells.join(',') + '\n';
+  });
+  const blob = new Blob([csv], {type: 'text/csv'});
+  const link = document.createElement('a');
+  link.href = URL.createObjectURL(blob);
+  link.download = 'resultats_filtrés_v3.csv';
+  link.click();
+}
+</script>
+
+</body>
+</html>
